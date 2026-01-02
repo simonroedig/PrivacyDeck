@@ -5,7 +5,7 @@ import os
 import subprocess
 
 # Betriebssystem erkennen
-OS_TYPE = platform.system()
+OS_TYPE = platform.system() 
 
 # Windows-spezifische Imports (nur laden, wenn nötig)
 if OS_TYPE == "Windows":
