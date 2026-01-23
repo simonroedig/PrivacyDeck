@@ -1,0 +1,3 @@
+vlt hier im piPico folder meherer .py files
+einaml mit "globalen" definition um die hardware anzusprechen (@tristan) components.py oder so,
+die ich (simon) dann importieren kann, in main.py
