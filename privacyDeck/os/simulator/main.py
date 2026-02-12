@@ -5,6 +5,8 @@ from lock_control import lock_os
 from clipboard_control import wipe_clipboard_history
 from usb_alert_control import toggle_usb_alert
 from airplane import gui_toggle_airplane_mode
+from location import gui_toggle_location
+from blackout import show_blackout_image
 
 
 # ===== STATE =====
@@ -12,6 +14,7 @@ from airplane import gui_toggle_airplane_mode
 mic_is_muted = False
 usb_alert_is_on = False
 airplane_mode_is_on = False
+location_is_on = False
 
 
 # ===== CALLBACKS =====
@@ -31,6 +34,10 @@ def lock_system():
 
 def wipe_clipboard():
     wipe_clipboard_history()
+
+
+def show_blackout():
+    show_blackout_image()
 
 
 def toggle_usb():
@@ -53,11 +60,22 @@ def toggle_airplane_mode():
     )
 
 
+def toggle_location():
+    global location_is_on
+    success = gui_toggle_location()
+    if success:
+        location_is_on = not location_is_on
+
+    btn_toggle_location.config(
+        text=f"Toggle: Location {'ON' if location_is_on else 'OFF'}"
+    )
+
+
 # ===== GUI =====
 
 root = tk.Tk()
 root.title("PrivacyDeck Control")
-root.geometry("320x410")
+root.geometry("320x550")
 root.resizable(False, False)
 
 title = tk.Label(root, text="PrivacyDeck GUI", font=("Arial", 14, "bold"))
@@ -96,6 +114,15 @@ btn_toggle_airplane = tk.Button(
 )
 btn_toggle_airplane.pack(pady=5)
 
+btn_toggle_location = tk.Button(
+    root,
+    text="Toggle: Location OFF",
+    width=22,
+    height=2,
+    command=toggle_location
+)
+btn_toggle_location.pack(pady=5)
+
 
 # ===== BUTTON SECTION =====
 
@@ -119,6 +146,15 @@ btn_clipboard = tk.Button(
     command=wipe_clipboard
 )
 btn_clipboard.pack(pady=5)
+
+btn_blackout = tk.Button(
+    root,
+    text="Button: Blackout",
+    width=22,
+    height=2,
+    command=show_blackout
+)
+btn_blackout.pack(pady=5)
 
 
 root.mainloop()
