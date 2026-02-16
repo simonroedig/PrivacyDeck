@@ -16,7 +16,6 @@ mic_is_muted = False
 usb_alert_is_on = False
 airplane_mode_is_on = False
 location_is_on = False
-webcam_is_on = False
 
 
 # ===== CALLBACKS =====
@@ -73,12 +72,8 @@ def toggle_location():
     )
 
 
-def toggle_webcam():
-    global webcam_is_on
-    webcam_is_on = webcam_controller.toggle()
-    btn_toggle_webcam.config(
-        text=f"Toggle: Webcam {'ON' if webcam_is_on else 'OFF'}"
-    )
+def set_webcam_privacy(value):
+    webcam_controller.set_privacy_level(value)
 
 
 def on_close():
@@ -140,14 +135,20 @@ btn_toggle_location = tk.Button(
 )
 btn_toggle_location.pack(pady=5)
 
-btn_toggle_webcam = tk.Button(
+label_webcam = tk.Label(root, text="Webcam Privacy Slider")
+label_webcam.pack(pady=(4, 0))
+
+slider_webcam = tk.Scale(
     root,
-    text="Toggle: Webcam OFF",
-    width=22,
-    height=2,
-    command=toggle_webcam
+    from_=0,
+    to=100,
+    orient="horizontal",
+    length=220,
+    command=set_webcam_privacy
 )
-btn_toggle_webcam.pack(pady=5)
+slider_webcam.set(0)
+slider_webcam.pack(pady=(0, 8))
+set_webcam_privacy(0)
 
 
 # ===== BUTTON SECTION =====

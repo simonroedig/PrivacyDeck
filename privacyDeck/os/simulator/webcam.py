@@ -11,6 +11,9 @@ except ImportError:
 PREVIEW_WIDTH = 160
 PREVIEW_HEIGHT = 128
 TARGET_ASPECT = PREVIEW_WIDTH / PREVIEW_HEIGHT
+OFF_THRESHOLD = 10
+CLEAR_THRESHOLD = 90
+MAX_BLUR_KERNEL = 31
 
 
 def _rgb_frame_to_photoimage(rgb_frame):
@@ -43,6 +46,7 @@ class WebcamController:
 	def __init__(self, parent: tk.Widget):
 		self._parent = parent
 		self._is_on = False
+		self._privacy_level = 0
 		self._capture = None
 		self._after_job = None
 
@@ -71,15 +75,39 @@ class WebcamController:
 	def is_on(self) -> bool:
 		return self._is_on
 
+	def set_privacy_level(self, value) -> bool:
+		try:
+			level = int(float(value))
+		except (TypeError, ValueError):
+			level = 0
+
+		self._privacy_level = max(0, min(100, level))
+
+		if self._privacy_level <= OFF_THRESHOLD:
+			if self._is_on:
+				self.stop()
+			else:
+				self._show_black_frame()
+				self._status.configure(text="OFF", fg="gray")
+			return False
+
+		started = self.start()
+		if not started:
+			return False
+
+		self._update_status_label()
+		return True
+
 	def toggle(self) -> bool:
 		if self._is_on:
-			self.stop()
+			self.set_privacy_level(0)
 		else:
-			self.start()
+			self.set_privacy_level(100)
 		return self._is_on
 
 	def start(self) -> bool:
 		if self._is_on:
+			self._update_status_label()
 			return True
 
 		if cv2 is None:
@@ -97,7 +125,7 @@ class WebcamController:
 		self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, PREVIEW_HEIGHT)
 
 		self._is_on = True
-		self._status.configure(text="ON", fg="green")
+		self._update_status_label()
 		self._schedule_next_frame()
 		print(">> Webcam gestartet")
 		return True
@@ -161,6 +189,7 @@ class WebcamController:
 
 		frame = _center_crop_to_aspect(frame)
 		frame = cv2.resize(frame, (PREVIEW_WIDTH, PREVIEW_HEIGHT))
+		frame = self._apply_blur(frame)
 		frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
 		self._preview_img = _rgb_frame_to_photoimage(frame)
@@ -171,3 +200,40 @@ class WebcamController:
 		ppm_header = f"P6\n{PREVIEW_WIDTH} {PREVIEW_HEIGHT}\n255\n".encode("ascii")
 		self._preview_img = tk.PhotoImage(data=ppm_header + black, format="PPM")
 		self._preview.configure(image=self._preview_img)
+
+	def _get_blur_kernel_size(self) -> int:
+		if self._privacy_level >= CLEAR_THRESHOLD:
+			return 1
+
+		span = CLEAR_THRESHOLD - OFF_THRESHOLD
+		if span <= 0:
+			return 1
+
+		blur_strength = (CLEAR_THRESHOLD - self._privacy_level) / span
+		blur_strength = max(0.0, min(1.0, blur_strength))
+
+		kernel = int(round(1 + blur_strength * (MAX_BLUR_KERNEL - 1)))
+		if kernel % 2 == 0:
+			kernel += 1
+
+		return max(1, min(MAX_BLUR_KERNEL, kernel))
+
+	def _apply_blur(self, frame):
+		kernel = self._get_blur_kernel_size()
+		if kernel <= 1:
+			return frame
+		return cv2.GaussianBlur(frame, (kernel, kernel), 0)
+
+	def _update_status_label(self):
+		if not self._is_on:
+			self._status.configure(text="OFF", fg="gray")
+			return
+
+		if self._privacy_level >= CLEAR_THRESHOLD:
+			self._status.configure(text="ON (CLEAR)", fg="green")
+			return
+
+		span = CLEAR_THRESHOLD - OFF_THRESHOLD
+		blur_pct = int(round((CLEAR_THRESHOLD - self._privacy_level) / span * 100))
+		blur_pct = max(0, min(100, blur_pct))
+		self._status.configure(text=f"ON (BLUR {blur_pct}%)", fg="orange")
