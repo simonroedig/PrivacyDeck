@@ -7,6 +7,7 @@ from usb_alert_control import toggle_usb_alert
 from airplane import gui_toggle_airplane_mode
 from location import gui_toggle_location
 from blackout import show_blackout_image
+from webcam import WebcamController
 
 
 # ===== STATE =====
@@ -15,6 +16,7 @@ mic_is_muted = False
 usb_alert_is_on = False
 airplane_mode_is_on = False
 location_is_on = False
+webcam_is_on = False
 
 
 # ===== CALLBACKS =====
@@ -71,15 +73,30 @@ def toggle_location():
     )
 
 
+def toggle_webcam():
+    global webcam_is_on
+    webcam_is_on = webcam_controller.toggle()
+    btn_toggle_webcam.config(
+        text=f"Toggle: Webcam {'ON' if webcam_is_on else 'OFF'}"
+    )
+
+
+def on_close():
+    webcam_controller.stop()
+    root.destroy()
+
+
 # ===== GUI =====
 
 root = tk.Tk()
 root.title("PrivacyDeck Control")
-root.geometry("320x550")
+root.geometry("320x760")
 root.resizable(False, False)
 
 title = tk.Label(root, text="PrivacyDeck GUI", font=("Arial", 14, "bold"))
 title.pack(pady=10)
+
+webcam_controller = WebcamController(root)
 
 
 # ===== TOGGLE SECTION =====
@@ -123,6 +140,15 @@ btn_toggle_location = tk.Button(
 )
 btn_toggle_location.pack(pady=5)
 
+btn_toggle_webcam = tk.Button(
+    root,
+    text="Toggle: Webcam OFF",
+    width=22,
+    height=2,
+    command=toggle_webcam
+)
+btn_toggle_webcam.pack(pady=5)
+
 
 # ===== BUTTON SECTION =====
 
@@ -157,4 +183,5 @@ btn_blackout = tk.Button(
 btn_blackout.pack(pady=5)
 
 
+root.protocol("WM_DELETE_WINDOW", on_close)
 root.mainloop()
