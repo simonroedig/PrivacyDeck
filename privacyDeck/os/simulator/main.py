@@ -8,6 +8,7 @@ from airplane import gui_toggle_airplane_mode
 from location import gui_toggle_location
 from blackout import show_blackout_image
 from webcam import WebcamController
+from audio_meter import AudioMeterWidget
 
 
 # ===== STATE =====
@@ -78,6 +79,10 @@ def set_webcam_privacy(value):
 
 def on_close():
     webcam_controller.stop()
+    try:
+        audio_meter.stop()
+    except Exception:
+        pass
     root.destroy()
 
 
@@ -91,7 +96,20 @@ root.resizable(False, False)
 title = tk.Label(root, text="PrivacyDeck GUI", font=("Arial", 14, "bold"))
 title.pack(pady=10)
 
-webcam_controller = WebcamController(root)
+# place webcam and audio meter side-by-side
+top_row = tk.Frame(root)
+top_row.pack(pady=6)
+
+webcam_controller = WebcamController(top_row)
+# re-pack webcam frame to the left and add audio meter
+try:
+    webcam_controller._frame.pack_forget()
+except Exception:
+    pass
+webcam_controller._frame.pack(side="left", padx=(0, 6))
+
+audio_meter = AudioMeterWidget(top_row, width=80, height=160)
+audio_meter.pack(side="left")
 
 
 # ===== TOGGLE SECTION =====

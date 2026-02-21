@@ -3,7 +3,7 @@ import tkinter as tk
 
 
 try:
-	import cv2
+	import cv2  
 except ImportError:
 	cv2 = None
 

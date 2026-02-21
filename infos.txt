@@ -1,0 +1,8 @@
+install on linux:
+sudo apt install python3-opencv
+sudo pip install --break-system-packages sounddevice
+
+or via venv:
+
+python3 -m venv venv
+source .venv/bin/activate

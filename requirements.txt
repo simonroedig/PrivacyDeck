@@ -1,0 +1,10 @@
+# Python packages used by privacyDeck/os/simulator
+opencv-python
+Pillow
+sounddevice
+numpy
+pyaudio
+pycaw
+comtypes
+win10toast
+WMI
