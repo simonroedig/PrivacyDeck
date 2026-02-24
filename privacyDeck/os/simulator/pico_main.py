@@ -98,6 +98,9 @@ def run():
 				if current_state != control["last_state"]:
 					now = time.ticks_ms()
 					if time.ticks_diff(now, control["last_change_ms"]) > DEBOUNCE_MS:
+						if control["name"] != "LOCK_BUTTON":
+							state_text = "ON" if current_state == 1 else "OFF"
+							print(control["name"], "switched:", state_text)
 						send_line(sock, control["event"])
 						print(control["event"])
 						response = recv_line(sock)
