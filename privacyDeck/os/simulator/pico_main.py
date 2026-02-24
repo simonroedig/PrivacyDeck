@@ -15,7 +15,7 @@ TOGGLE_BLACKOUT_PIN = 7
 TOGGLE_MIC_PIN = 8
 DEBOUNCE_MS = 250
 
-# Controls are wired to 3V3, so inputs use PULL_DOWN and read 1 when active.
+# Controls are wired to GND, so inputs use PULL_UP and read 0 when active.
 EVENTS = [
 	{"name": "LOCK_BUTTON", "pin_num": BUTTON_PIN, "event": "EVENT LOCK_BUTTON pressed"},
 	{"name": "TOGGLE_USB", "pin_num": TOGGLE_USB_PIN, "event": "EVENT TOGGLE_USB changed"},
@@ -73,13 +73,13 @@ def connect_daemon():
 def run():
 	controls = []
 	for item in EVENTS:
-		pin = machine.Pin(item["pin_num"], machine.Pin.IN, machine.Pin.PULL_DOWN)
+		pin = machine.Pin(item["pin_num"], machine.Pin.IN, machine.Pin.PULL_UP)
 		controls.append(
 			{
 				"name": item["name"],
 				"pin": pin,
 				"event": item["event"],
-				"last_state": pin.value(),
+				"last_state": 1 if pin.value() == 0 else 0,
 				"last_change_ms": 0,
 			}
 		)
@@ -94,7 +94,8 @@ def run():
 				print("Connected to daemon")
 
 			for control in controls:
-				current_state = control["pin"].value()
+				raw_state = control["pin"].value()
+				current_state = 1 if raw_state == 0 else 0
 				if current_state != control["last_state"]:
 					now = time.ticks_ms()
 					if time.ticks_diff(now, control["last_change_ms"]) > DEBOUNCE_MS:
