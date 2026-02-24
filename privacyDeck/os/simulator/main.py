@@ -23,6 +23,12 @@ location_is_on = False
 SERVER_HOST = "0.0.0.0"
 SERVER_PORT = 50555
 
+EVENT_LOCK = "EVENT LOCK_BUTTON pressed"
+EVENT_USB_TOGGLE = "EVENT TOGGLE_USB changed"
+EVENT_AIRPLANE_TOGGLE = "EVENT TOGGLE_AIRPLANE changed"
+EVENT_BLACKOUT_TOGGLE = "EVENT TOGGLE_BLACKOUT changed"
+EVENT_MIC_TOGGLE = "EVENT TOGGLE_MIC changed"
+
 
 class PicoNetworkServer:
     def __init__(self, host, port, event_callback, status_callback):
@@ -109,8 +115,28 @@ class PicoNetworkServer:
                     self._send_line(conn, "PONG")
                     continue
 
-                if line == "EVENT LOCK_BUTTON pressed":
+                if line == EVENT_LOCK:
                     self.event_callback("lock_system")
+                    self._send_line(conn, "OK")
+                    continue
+
+                if line == EVENT_USB_TOGGLE:
+                    self.event_callback("toggle_usb")
+                    self._send_line(conn, "OK")
+                    continue
+
+                if line == EVENT_AIRPLANE_TOGGLE:
+                    self.event_callback("toggle_airplane")
+                    self._send_line(conn, "OK")
+                    continue
+
+                if line == EVENT_BLACKOUT_TOGGLE:
+                    self.event_callback("show_blackout")
+                    self._send_line(conn, "OK")
+                    continue
+
+                if line == EVENT_MIC_TOGGLE:
+                    self.event_callback("toggle_mic")
                     self._send_line(conn, "OK")
                     continue
 
@@ -190,6 +216,14 @@ def update_network_status(text):
 def handle_network_event(event_name):
     if event_name == "lock_system":
         root.after(0, lock_system)
+    elif event_name == "toggle_usb":
+        root.after(0, toggle_usb)
+    elif event_name == "toggle_airplane":
+        root.after(0, toggle_airplane_mode)
+    elif event_name == "show_blackout":
+        root.after(0, show_blackout)
+    elif event_name == "toggle_mic":
+        root.after(0, toggle_mic)
 
 
 def on_close():

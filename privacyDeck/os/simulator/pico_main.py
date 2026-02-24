@@ -9,7 +9,20 @@ WIFI_PASSWORD = "25062506"
 DAEMON_HOST = "10.174.249.146"
 DAEMON_PORT = 50555
 BUTTON_PIN = 1
+TOGGLE_USB_PIN = 5
+TOGGLE_AIRPLANE_PIN = 6
+TOGGLE_BLACKOUT_PIN = 7
+TOGGLE_MIC_PIN = 8
 DEBOUNCE_MS = 250
+
+# Controls are wired to 3V3, so inputs use PULL_DOWN and read 1 when active.
+EVENTS = [
+	{"name": "LOCK_BUTTON", "pin_num": BUTTON_PIN, "event": "EVENT LOCK_BUTTON pressed"},
+	{"name": "TOGGLE_USB", "pin_num": TOGGLE_USB_PIN, "event": "EVENT TOGGLE_USB changed"},
+	{"name": "TOGGLE_AIRPLANE", "pin_num": TOGGLE_AIRPLANE_PIN, "event": "EVENT TOGGLE_AIRPLANE changed"},
+	{"name": "TOGGLE_BLACKOUT", "pin_num": TOGGLE_BLACKOUT_PIN, "event": "EVENT TOGGLE_BLACKOUT changed"},
+	{"name": "TOGGLE_MIC", "pin_num": TOGGLE_MIC_PIN, "event": "EVENT TOGGLE_MIC changed"},
+]
 
 
 def connect_wifi():
@@ -58,9 +71,19 @@ def connect_daemon():
 
 
 def run():
-	button = machine.Pin(BUTTON_PIN, machine.Pin.IN, machine.Pin.PULL_UP)
-	last_button_state = button.value()
-	last_press_ms = 0
+	controls = []
+	for item in EVENTS:
+		pin = machine.Pin(item["pin_num"], machine.Pin.IN, machine.Pin.PULL_DOWN)
+		controls.append(
+			{
+				"name": item["name"],
+				"pin": pin,
+				"event": item["event"],
+				"last_state": pin.value(),
+				"last_change_ms": 0,
+			}
+		)
+
 	sock = None
 
 	while True:
@@ -70,18 +93,18 @@ def run():
 				sock = connect_daemon()
 				print("Connected to daemon")
 
-			current_state = button.value()
-			falling_edge = last_button_state == 1 and current_state == 0
-			if falling_edge:
-				now = time.ticks_ms()
-				if time.ticks_diff(now, last_press_ms) > DEBOUNCE_MS:
-					send_line(sock, "EVENT LOCK_BUTTON pressed")
-					print("EVENT LOCK_BUTTON pressed")
-					response = recv_line(sock)
-					print("Event response:", response)
-					last_press_ms = now
+			for control in controls:
+				current_state = control["pin"].value()
+				if current_state != control["last_state"]:
+					now = time.ticks_ms()
+					if time.ticks_diff(now, control["last_change_ms"]) > DEBOUNCE_MS:
+						send_line(sock, control["event"])
+						print(control["event"])
+						response = recv_line(sock)
+						print("Event response:", response)
+						control["last_change_ms"] = now
+					control["last_state"] = current_state
 
-			last_button_state = current_state
 			time.sleep_ms(25)
 		except OSError as exc:
 			print("Connection issue:", exc)
