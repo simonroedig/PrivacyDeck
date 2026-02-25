@@ -27,7 +27,7 @@ location_is_on = False
 
 SERIAL_PORT = os.getenv("PICO_SERIAL_PORT")
 SERIAL_BAUDRATE = 115200
-
+# test
 FUNCTION_TO_ACTION = {
     "Lock OS": "lock_system",
     "wipe clipboard history": "wipe_clipboard",
