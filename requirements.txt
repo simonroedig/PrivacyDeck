@@ -8,3 +8,4 @@ pycaw
 comtypes
 win10toast
 WMI
+pyserial

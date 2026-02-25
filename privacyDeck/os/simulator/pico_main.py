@@ -1,125 +1,82 @@
 import machine
-import network
-import socket
 import time
+import json
 
- 
-WIFI_SSID = "Simon69"
-WIFI_PASSWORD = "25062506"
-DAEMON_HOST = "10.174.249.146"
-DAEMON_PORT = 50555
-BUTTON_PIN = 1
-TOGGLE_USB_PIN = 5
-TOGGLE_AIRPLANE_PIN = 6
-TOGGLE_BLACKOUT_PIN = 7
-TOGGLE_MIC_PIN = 8
-DEBOUNCE_MS = 250
+# Define push buttons (trigger only on press)
+BUTTONS = {
+    0: {"name": "Button 1", "func": "Lock OS"},
+    1: {"name": "Button 2", "func": "browser clean"},
+    2: {"name": "Button 3", "func": "gps mode"},
+    3: {"name": "Button 4", "func": "wipe clipboard history"},
+    4: {"name": "Button 5", "func": "Instant Privacy"}
+}
 
-# Controls are wired to GND, so inputs use PULL_UP and read 0 when active.
-EVENTS = [
-	{"name": "LOCK_BUTTON", "pin_num": BUTTON_PIN, "event": "EVENT LOCK_BUTTON pressed"},
-	{"name": "TOGGLE_USB", "pin_num": TOGGLE_USB_PIN, "event": "EVENT TOGGLE_USB changed"},
-	{"name": "TOGGLE_AIRPLANE", "pin_num": TOGGLE_AIRPLANE_PIN, "event": "EVENT TOGGLE_AIRPLANE changed"},
-	{"name": "TOGGLE_BLACKOUT", "pin_num": TOGGLE_BLACKOUT_PIN, "event": "EVENT TOGGLE_BLACKOUT changed"},
-	{"name": "TOGGLE_MIC", "pin_num": TOGGLE_MIC_PIN, "event": "EVENT TOGGLE_MIC changed"},
-]
+# Define toggle switches (trigger on any state change)
+# Swapped Toggle 1 and Toggle 4 functions as requested
+TOGGLES = {
+    5: {"name": "Toggle 1", "func": "usb alert"},
+    6: {"name": "Toggle 2", "func": "blackout/presentation mode"},
+    7: {"name": "Toggle 3", "func": "airplane mode"},
+    8: {"name": "Toggle 4", "func": "mic mute toggle"}
+}
 
+# Initialization and state tracking
+pins = {}
+last_states = {}
+last_debounce_time = {}
+DEBOUNCE_DELAY = 50  # 50 milliseconds to prevent switch bouncing
 
-def connect_wifi():
-	wlan = network.WLAN(network.STA_IF)
-	wlan.active(True)
-	if wlan.isconnected():
-		return wlan
+# Setup all pins with internal Pull-Ups
+for pin_num in list(BUTTONS.keys()) + list(TOGGLES.keys()):
+    pin = machine.Pin(pin_num, machine.Pin.IN, machine.Pin.PULL_UP)
+    pins[pin_num] = pin
+    last_states[pin_num] = pin.value()
+    last_debounce_time[pin_num] = 0
 
-	wlan.connect(WIFI_SSID, WIFI_PASSWORD)
-	started = time.ticks_ms()
-	while not wlan.isconnected():
-		if time.ticks_diff(time.ticks_ms(), started) > 20000:
-			raise OSError("wifi_timeout")
-		time.sleep_ms(200)
-	return wlan
+def send_serial(component_type, pin_num, name, func, state):
+    """Formats the event as JSON and prints it to the serial output"""
+    data = {
+        "type": component_type,
+        "pin": pin_num,
+        "name": name,
+        "function": func,
+        "state": state
+    }
+    # print() in MicroPython automatically sends to the USB Serial port
+    print(json.dumps(data))
 
+print(json.dumps({"info": "Pico Macro Pad Started"}))
 
-def send_line(sock, text):
-	sock.send((text + "\n").encode())
+# Main loop
+while True:
+    current_time = time.ticks_ms()
 
+    # --- Check Push Buttons ---
+    for pin_num in BUTTONS.keys():
+        current_value = pins[pin_num].value()
+        
+        # If the state changed
+        if current_value != last_states[pin_num]:
+            # Check if enough time has passed (debounce)
+            if time.ticks_diff(current_time, last_debounce_time[pin_num]) > DEBOUNCE_DELAY:
+                # 0 means pressed (connected to ground)
+                if current_value == 0: 
+                    send_serial("button", pin_num, BUTTONS[pin_num]["name"], BUTTONS[pin_num]["func"], "pressed")
+                
+                last_states[pin_num] = current_value
+                last_debounce_time[pin_num] = current_time
 
-def recv_line(sock):
-	data = bytearray()
-	while True:
-		chunk = sock.recv(1)
-		if not chunk:
-			raise OSError("socket_closed")
-		if chunk == b"\n":
-			break
-		data.extend(chunk)
-	return data.decode().strip()
-
-
-def connect_daemon():
-	addr = socket.getaddrinfo(DAEMON_HOST, DAEMON_PORT)[0][-1]
-	sock = socket.socket()
-	sock.settimeout(10)
-	sock.connect(addr)
-	send_line(sock, "HELLO PRIVACYDECK_PICO 1")
-	ack = recv_line(sock)
-	if ack != "HELLO_ACK PRIVACYDECK_DAEMON 1":
-		sock.close()
-		raise OSError("bad_handshake")
-	sock.settimeout(2)
-	return sock
-
-
-def run():
-	controls = []
-	for item in EVENTS:
-		pin = machine.Pin(item["pin_num"], machine.Pin.IN, machine.Pin.PULL_UP)
-		controls.append(
-			{
-				"name": item["name"],
-				"pin": pin,
-				"event": item["event"],
-				"last_state": 1 if pin.value() == 0 else 0,
-				"last_change_ms": 0,
-			}
-		)
-
-	sock = None
-
-	while True:
-		try:
-			connect_wifi()
-			if sock is None:
-				sock = connect_daemon()
-				print("Connected to daemon")
-
-			for control in controls:
-				raw_state = control["pin"].value()
-				current_state = 1 if raw_state == 0 else 0
-				if current_state != control["last_state"]:
-					now = time.ticks_ms()
-					if time.ticks_diff(now, control["last_change_ms"]) > DEBOUNCE_MS:
-						if control["name"] != "LOCK_BUTTON":
-							state_text = "ON" if current_state == 1 else "OFF"
-							print(control["name"], "switched:", state_text)
-						send_line(sock, control["event"])
-						print(control["event"])
-						response = recv_line(sock)
-						print("Event response:", response)
-						control["last_change_ms"] = now
-					control["last_state"] = current_state
-
-			time.sleep_ms(25)
-		except OSError as exc:
-			print("Connection issue:", exc)
-			if sock is not None:
-				try:
-					sock.close()
-				except OSError:
-					pass
-			sock = None
-			time.sleep(2)
-
-
-run()
-
+    # --- Check Toggles ---
+    for pin_num in TOGGLES.keys():
+        current_value = pins[pin_num].value()
+        
+        # If the toggle state changed
+        if current_value != last_states[pin_num]:
+            # Check if enough time has passed (debounce)
+            if time.ticks_diff(current_time, last_debounce_time[pin_num]) > DEBOUNCE_DELAY:
+                # 0 usually means switch is ON (closed to ground), 1 means OFF (open)
+                state_str = "ON" if current_value == 0 else "OFF"
+                send_serial("toggle", pin_num, TOGGLES[pin_num]["name"], TOGGLES[pin_num]["func"], state_str)
+                
+                last_states[pin_num] = current_value
+                last_debounce_time[pin_num] = current_time

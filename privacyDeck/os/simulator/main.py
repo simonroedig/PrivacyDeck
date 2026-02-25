@@ -1,6 +1,11 @@
 import tkinter as tk
-import socket
 import threading
+import time
+import os
+import json
+
+import serial
+from serial.tools import list_ports
 
 from mic_control import set_mic_mute
 from lock_control import lock_os
@@ -20,135 +25,121 @@ usb_alert_is_on = False
 airplane_mode_is_on = False
 location_is_on = False
 
-SERVER_HOST = "0.0.0.0"
-SERVER_PORT = 50555
+SERIAL_PORT = os.getenv("PICO_SERIAL_PORT")
+SERIAL_BAUDRATE = 115200
 
-EVENT_LOCK = "EVENT LOCK_BUTTON pressed"
-EVENT_USB_TOGGLE = "EVENT TOGGLE_USB changed"
-EVENT_AIRPLANE_TOGGLE = "EVENT TOGGLE_AIRPLANE changed"
-EVENT_BLACKOUT_TOGGLE = "EVENT TOGGLE_BLACKOUT changed"
-EVENT_MIC_TOGGLE = "EVENT TOGGLE_MIC changed"
+FUNCTION_TO_ACTION = {
+    "Lock OS": "lock_system",
+    "wipe clipboard history": "wipe_clipboard",
+    "mic mute toggle": "toggle_mic",
+    "airplane mode": "toggle_airplane",
+    "blackout/presentation mode": "show_blackout",
+    "usb alert": "toggle_usb",
+    "browser clean": None,
+    "gps mode": None,
+    "Instant Privacy": None,
+}
 
 
-class PicoNetworkServer:
-    def __init__(self, host, port, event_callback, status_callback):
-        self.host = host
+class PicoSerialListener:
+    def __init__(self, port, baudrate, event_callback, status_callback):
         self.port = port
+        self.baudrate = baudrate
         self.event_callback = event_callback
         self.status_callback = status_callback
         self._stop_event = threading.Event()
-        self._server_socket = None
-        self._accept_thread = None
+        self._serial = None
+        self._thread = None
 
     def start(self):
-        if self._accept_thread is not None:
+        if self._thread is not None:
             return
-        self._accept_thread = threading.Thread(target=self._run_server, daemon=True)
-        self._accept_thread.start()
+        self._thread = threading.Thread(target=self._run_listener, daemon=True)
+        self._thread.start()
 
     def stop(self):
         self._stop_event.set()
-        if self._server_socket is not None:
+        if self._serial is not None:
             try:
-                self._server_socket.close()
-            except OSError:
+                self._serial.close()
+            except Exception:
                 pass
 
-    def _run_server(self):
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._server_socket = server_socket
-        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server_socket.bind((self.host, self.port))
-        server_socket.listen(2)
-        server_socket.settimeout(1.0)
-        self.status_callback(f"Network: listening on {self.host}:{self.port}")
+    def _resolve_port(self):
+        if self.port:
+            return self.port
 
+        for item in list_ports.comports():
+            device = (item.device or "").lower()
+            description = (item.description or "").lower()
+            if "ttyacm" in device or "ttyusb" in device:
+                return item.device
+            if "pico" in description or "rp2040" in description:
+                return item.device
+        return None
+
+    def _run_listener(self):
+        self.status_callback("Serial: waiting for Pico...")
         while not self._stop_event.is_set():
-            try:
-                conn, addr = server_socket.accept()
-            except socket.timeout:
+            port = self._resolve_port()
+            if not port:
+                self.status_callback("Serial: no device found")
+                time.sleep(2.0)
                 continue
-            except OSError:
-                break
 
-            client_thread = threading.Thread(
-                target=self._handle_client,
-                args=(conn, addr),
-                daemon=True,
-            )
-            client_thread.start()
-
-        self.status_callback("Network: stopped")
-
-    def _send_line(self, conn, message):
-        conn.sendall((message + "\n").encode("utf-8"))
-
-    def _read_line(self, conn):
-        data = bytearray()
-        while True:
-            chunk = conn.recv(1)
-            if not chunk:
-                return None
-            if chunk == b"\n":
-                break
-            data.extend(chunk)
-        return data.decode("utf-8", errors="replace").strip()
-
-    def _handle_client(self, conn, addr):
-        conn.settimeout(30.0)
-        self.status_callback(f"Network: connection from {addr[0]}:{addr[1]}")
-        try:
-            hello = self._read_line(conn)
-            if hello != "HELLO PRIVACYDECK_PICO 1":
-                self._send_line(conn, "ERR handshake")
-                return
-
-            self._send_line(conn, "HELLO_ACK PRIVACYDECK_DAEMON 1")
-            self.status_callback(f"Network: connected to {addr[0]}:{addr[1]}")
-
-            while not self._stop_event.is_set():
-                line = self._read_line(conn)
-                if line is None:
-                    break
-
-                if line == "PING":
-                    self._send_line(conn, "PONG")
-                    continue
-
-                if line == EVENT_LOCK:
-                    self.event_callback("lock_system")
-                    self._send_line(conn, "OK")
-                    continue
-
-                if line == EVENT_USB_TOGGLE:
-                    self.event_callback("toggle_usb")
-                    self._send_line(conn, "OK")
-                    continue
-
-                if line == EVENT_AIRPLANE_TOGGLE:
-                    self.event_callback("toggle_airplane")
-                    self._send_line(conn, "OK")
-                    continue
-
-                if line == EVENT_BLACKOUT_TOGGLE:
-                    self.event_callback("show_blackout")
-                    self._send_line(conn, "OK")
-                    continue
-
-                if line == EVENT_MIC_TOGGLE:
-                    self.event_callback("toggle_mic")
-                    self._send_line(conn, "OK")
-                    continue
-
-                self._send_line(conn, "ERR unknown_event")
-        except (ConnectionError, OSError):
-            pass
-        finally:
             try:
-                conn.close()
-            except OSError:
-                pass
-            self.status_callback("Network: waiting for device")
+                ser = serial.Serial(port=port, baudrate=self.baudrate, timeout=1.0)
+                self._serial = ser
+                try:
+                    ser.reset_input_buffer()
+                except Exception:
+                    pass
+                self.status_callback(f"Serial: connected on {port}")
+
+                while not self._stop_event.is_set():
+                    raw = ser.readline()
+                    if not raw:
+                        continue
+                    line = raw.decode("utf-8", errors="replace").strip()
+                    if not line:
+                        continue
+                    
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                        
+                    if "function" not in data:
+                        continue
+                        
+                    print(f"[SERIAL RX] {line}")
+                    self._dispatch_event(data)
+            except (serial.SerialException, OSError):
+                self.status_callback("Serial: disconnected, retrying...")
+                time.sleep(1.5)
+            finally:
+                if self._serial is not None:
+                    try:
+                        self._serial.close()
+                    except Exception:
+                        pass
+                self._serial = None
+
+        self.status_callback("Serial: stopped")
+
+    def _dispatch_event(self, data):
+        func = data.get("function")
+        if func not in FUNCTION_TO_ACTION:
+            print(f"[IGNORED] unknown function: {func}")
+            return
+
+        action = FUNCTION_TO_ACTION[func]
+        if action is None:
+            print(f"[IGNORED] no daemon action for: {func}")
+            return
+
+        print(f"[CALL] {action}")
+        self.event_callback(action)
 
 
 # ===== CALLBACKS =====
@@ -216,6 +207,8 @@ def update_network_status(text):
 def handle_network_event(event_name):
     if event_name == "lock_system":
         root.after(0, lock_system)
+    elif event_name == "wipe_clipboard":
+        root.after(0, wipe_clipboard)
     elif event_name == "toggle_usb":
         root.after(0, toggle_usb)
     elif event_name == "toggle_airplane":
@@ -227,7 +220,7 @@ def handle_network_event(event_name):
 
 
 def on_close():
-    network_server.stop()
+    serial_listener.stop()
     webcam_controller.stop()
     try:
         audio_meter.stop()
@@ -246,7 +239,7 @@ root.resizable(False, False)
 title = tk.Label(root, text="PrivacyDeck GUI", font=("Arial", 14, "bold"))
 title.pack(pady=10)
 
-network_status_label = tk.Label(root, text="Network: starting...")
+network_status_label = tk.Label(root, text="Serial: starting...")
 network_status_label.pack(pady=(0, 6))
 
 # place webcam and audio meter side-by-side
@@ -264,13 +257,13 @@ webcam_controller._frame.pack(side="left", padx=(0, 6))
 audio_meter = AudioMeterWidget(top_row, width=80, height=160)
 audio_meter.pack(side="left")
 
-network_server = PicoNetworkServer(
-    host=SERVER_HOST,
-    port=SERVER_PORT,
+serial_listener = PicoSerialListener(
+    port=SERIAL_PORT,
+    baudrate=SERIAL_BAUDRATE,
     event_callback=handle_network_event,
     status_callback=update_network_status,
 )
-network_server.start()
+serial_listener.start()
 
 
 # ===== TOGGLE SECTION =====
