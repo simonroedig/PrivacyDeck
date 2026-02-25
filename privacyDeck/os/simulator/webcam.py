@@ -1,9 +1,10 @@
 import platform
 import tkinter as tk
+from pathlib import Path
 
 
 try:
-	import cv2
+	import cv2  
 except ImportError:
 	cv2 = None
 
@@ -14,6 +15,30 @@ TARGET_ASPECT = PREVIEW_WIDTH / PREVIEW_HEIGHT
 OFF_THRESHOLD = 10
 CLEAR_THRESHOLD = 90
 MAX_BLUR_KERNEL = 31
+
+
+def _linux_camera_candidates():
+	"""Return Linux camera device candidates with USB webcams preferred."""
+	preferred = []
+	fallback = []
+
+	# Stable symlinks are usually available on Linux systems with v4l2 support.
+	# Prefer USB devices first to avoid selecting the built-in/internal camera.
+	for base in (Path("/dev/v4l/by-id"), Path("/dev/v4l/by-path")):
+		if not base.exists():
+			continue
+
+		for device in sorted(base.glob("*-video-index0")):
+			name = device.name.lower()
+			if "usb" in name:
+				preferred.append(str(device))
+			else:
+				fallback.append(str(device))
+
+	# Probe numeric indices after stable paths.
+	# Favor non-zero first since index 0 is often the internal webcam.
+	numeric_fallback = list(range(1, 7)) + [0]
+	return preferred + fallback + numeric_fallback
 
 
 def _rgb_frame_to_photoimage(rgb_frame):
@@ -150,12 +175,20 @@ class WebcamController:
 			return None
 
 		os_type = platform.system()
-		backends = []
 
+		if os_type == "Linux":
+			for source in _linux_camera_candidates():
+				cap = cv2.VideoCapture(source, cv2.CAP_V4L2)
+				if cap is not None and cap.isOpened():
+					print(f">> Kameraquelle gewählt: {source}")
+					return cap
+				if cap is not None:
+					cap.release()
+			return None
+
+		backends = []
 		if os_type == "Windows":
 			backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF]
-		elif os_type == "Linux":
-			backends = [cv2.CAP_V4L2]
 
 		backends.append(None)
 

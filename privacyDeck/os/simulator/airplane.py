@@ -2,6 +2,7 @@ import platform
 import subprocess
 import time
 import ctypes
+import shutil
 
 
 VK_TAB = 0x09
@@ -72,6 +73,9 @@ def gui_toggle_airplane_mode() -> bool:
     6x TAB, 4x Pfeil runter, ENTER, SPACE, ALT+F4.
     """
     os_type = platform.system()
+    if os_type == "Linux":
+        return _linux_toggle_airplane()
+
     if os_type != "Windows":
         print(f">> {os_type}: GUI-Automation nur unter Windows verfügbar")
         return False
@@ -106,6 +110,84 @@ def gui_toggle_airplane_mode() -> bool:
 
     print(">> Airplane Mode GUI-Sequenz ausgeführt")
     return True
+
+
+def _linux_get_states():
+    """Return (wifi_state, wwan_state) where each is 'enabled'|'disabled' or None."""
+    wifi_state = None
+    wwan_state = None
+    try:
+        res = subprocess.run(["nmcli", "radio", "wifi"], capture_output=True, text=True)
+        if res.returncode == 0:
+            wifi_state = res.stdout.strip().lower()
+    except Exception:
+        wifi_state = None
+
+    try:
+        res = subprocess.run(["nmcli", "radio", "wwan"], capture_output=True, text=True)
+        if res.returncode == 0:
+            wwan_state = res.stdout.strip().lower()
+    except Exception:
+        wwan_state = None
+
+    return wifi_state, wwan_state
+
+
+def _linux_toggle_airplane() -> bool:
+    """Best-effort toggle of airplane mode on Linux using nmcli, fallback to rfkill.
+
+    Returns True on success, False otherwise.
+    """
+    if not shutil.which("nmcli") and not shutil.which("rfkill"):
+        print(">> Linux: neither nmcli nor rfkill found; cannot toggle airplane mode")
+        return False
+
+    wifi, wwan = _linux_get_states()
+    # consider airplane ON when wifi is disabled and (wwan disabled or missing)
+    airplane_on = (wifi == "disabled") and (wwan in (None, "disabled"))
+
+    cmds = []
+    # prefer nmcli when available
+    if shutil.which("nmcli"):
+        if airplane_on:
+            if wifi is not None:
+                cmds.append(["nmcli", "radio", "wifi", "on"])
+            if wwan is not None:
+                cmds.append(["nmcli", "radio", "wwan", "on"])
+        else:
+            if wifi is not None:
+                cmds.append(["nmcli", "radio", "wifi", "off"])
+            if wwan is not None:
+                cmds.append(["nmcli", "radio", "wwan", "off"])
+
+        if not cmds:
+            # generic fallback with nmcli
+            cmds.append(["nmcli", "radio", "all", "on" if airplane_on else "off"])
+
+        success = True
+        for cmd in cmds:
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode != 0:
+                success = False
+                print(f">> nmcli failed ({' '.join(cmd)}): {res.stderr.strip()}")
+        if success:
+            print(f">> Linux: Airplane mode set to {'OFF' if airplane_on else 'ON'} (nmcli)")
+            return True
+
+    # nmcli either not available or failed; try rfkill
+    if shutil.which("rfkill"):
+        try:
+            cmd = ["rfkill", "unblock", "all"] if airplane_on else ["rfkill", "block", "all"]
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode == 0:
+                print(f">> Linux: Airplane mode set to {'OFF' if airplane_on else 'ON'} (rfkill)")
+                return True
+            else:
+                print(f">> rfkill failed: {res.stderr.strip()}")
+        except Exception as e:
+            print(f">> rfkill exception: {e}")
+
+    return False
 
 
 # ===== TEST =====

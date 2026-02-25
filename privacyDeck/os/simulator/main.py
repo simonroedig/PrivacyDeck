@@ -1,4 +1,6 @@
 import tkinter as tk
+import socket
+import threading
 
 from mic_control import set_mic_mute
 from lock_control import lock_os
@@ -8,6 +10,7 @@ from airplane import gui_toggle_airplane_mode
 from location import gui_toggle_location
 from blackout import show_blackout_image
 from webcam import WebcamController
+from audio_meter import AudioMeterWidget
 
 
 # ===== STATE =====
@@ -16,6 +19,136 @@ mic_is_muted = False
 usb_alert_is_on = False
 airplane_mode_is_on = False
 location_is_on = False
+
+SERVER_HOST = "0.0.0.0"
+SERVER_PORT = 50555
+
+EVENT_LOCK = "EVENT LOCK_BUTTON pressed"
+EVENT_USB_TOGGLE = "EVENT TOGGLE_USB changed"
+EVENT_AIRPLANE_TOGGLE = "EVENT TOGGLE_AIRPLANE changed"
+EVENT_BLACKOUT_TOGGLE = "EVENT TOGGLE_BLACKOUT changed"
+EVENT_MIC_TOGGLE = "EVENT TOGGLE_MIC changed"
+
+
+class PicoNetworkServer:
+    def __init__(self, host, port, event_callback, status_callback):
+        self.host = host
+        self.port = port
+        self.event_callback = event_callback
+        self.status_callback = status_callback
+        self._stop_event = threading.Event()
+        self._server_socket = None
+        self._accept_thread = None
+
+    def start(self):
+        if self._accept_thread is not None:
+            return
+        self._accept_thread = threading.Thread(target=self._run_server, daemon=True)
+        self._accept_thread.start()
+
+    def stop(self):
+        self._stop_event.set()
+        if self._server_socket is not None:
+            try:
+                self._server_socket.close()
+            except OSError:
+                pass
+
+    def _run_server(self):
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._server_socket = server_socket
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_socket.bind((self.host, self.port))
+        server_socket.listen(2)
+        server_socket.settimeout(1.0)
+        self.status_callback(f"Network: listening on {self.host}:{self.port}")
+
+        while not self._stop_event.is_set():
+            try:
+                conn, addr = server_socket.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+
+            client_thread = threading.Thread(
+                target=self._handle_client,
+                args=(conn, addr),
+                daemon=True,
+            )
+            client_thread.start()
+
+        self.status_callback("Network: stopped")
+
+    def _send_line(self, conn, message):
+        conn.sendall((message + "\n").encode("utf-8"))
+
+    def _read_line(self, conn):
+        data = bytearray()
+        while True:
+            chunk = conn.recv(1)
+            if not chunk:
+                return None
+            if chunk == b"\n":
+                break
+            data.extend(chunk)
+        return data.decode("utf-8", errors="replace").strip()
+
+    def _handle_client(self, conn, addr):
+        conn.settimeout(30.0)
+        self.status_callback(f"Network: connection from {addr[0]}:{addr[1]}")
+        try:
+            hello = self._read_line(conn)
+            if hello != "HELLO PRIVACYDECK_PICO 1":
+                self._send_line(conn, "ERR handshake")
+                return
+
+            self._send_line(conn, "HELLO_ACK PRIVACYDECK_DAEMON 1")
+            self.status_callback(f"Network: connected to {addr[0]}:{addr[1]}")
+
+            while not self._stop_event.is_set():
+                line = self._read_line(conn)
+                if line is None:
+                    break
+
+                if line == "PING":
+                    self._send_line(conn, "PONG")
+                    continue
+
+                if line == EVENT_LOCK:
+                    self.event_callback("lock_system")
+                    self._send_line(conn, "OK")
+                    continue
+
+                if line == EVENT_USB_TOGGLE:
+                    self.event_callback("toggle_usb")
+                    self._send_line(conn, "OK")
+                    continue
+
+                if line == EVENT_AIRPLANE_TOGGLE:
+                    self.event_callback("toggle_airplane")
+                    self._send_line(conn, "OK")
+                    continue
+
+                if line == EVENT_BLACKOUT_TOGGLE:
+                    self.event_callback("show_blackout")
+                    self._send_line(conn, "OK")
+                    continue
+
+                if line == EVENT_MIC_TOGGLE:
+                    self.event_callback("toggle_mic")
+                    self._send_line(conn, "OK")
+                    continue
+
+                self._send_line(conn, "ERR unknown_event")
+        except (ConnectionError, OSError):
+            pass
+        finally:
+            try:
+                conn.close()
+            except OSError:
+                pass
+            self.status_callback("Network: waiting for device")
 
 
 # ===== CALLBACKS =====
@@ -76,8 +209,30 @@ def set_webcam_privacy(value):
     webcam_controller.set_privacy_level(value)
 
 
+def update_network_status(text):
+    root.after(0, lambda: network_status_label.config(text=text))
+
+
+def handle_network_event(event_name):
+    if event_name == "lock_system":
+        root.after(0, lock_system)
+    elif event_name == "toggle_usb":
+        root.after(0, toggle_usb)
+    elif event_name == "toggle_airplane":
+        root.after(0, toggle_airplane_mode)
+    elif event_name == "show_blackout":
+        root.after(0, show_blackout)
+    elif event_name == "toggle_mic":
+        root.after(0, toggle_mic)
+
+
 def on_close():
+    network_server.stop()
     webcam_controller.stop()
+    try:
+        audio_meter.stop()
+    except Exception:
+        pass
     root.destroy()
 
 
@@ -91,7 +246,31 @@ root.resizable(False, False)
 title = tk.Label(root, text="PrivacyDeck GUI", font=("Arial", 14, "bold"))
 title.pack(pady=10)
 
-webcam_controller = WebcamController(root)
+network_status_label = tk.Label(root, text="Network: starting...")
+network_status_label.pack(pady=(0, 6))
+
+# place webcam and audio meter side-by-side
+top_row = tk.Frame(root)
+top_row.pack(pady=6)
+
+webcam_controller = WebcamController(top_row)
+# re-pack webcam frame to the left and add audio meter
+try:
+    webcam_controller._frame.pack_forget()
+except Exception:
+    pass
+webcam_controller._frame.pack(side="left", padx=(0, 6))
+
+audio_meter = AudioMeterWidget(top_row, width=80, height=160)
+audio_meter.pack(side="left")
+
+network_server = PicoNetworkServer(
+    host=SERVER_HOST,
+    port=SERVER_PORT,
+    event_callback=handle_network_event,
+    status_callback=update_network_status,
+)
+network_server.start()
 
 
 # ===== TOGGLE SECTION =====

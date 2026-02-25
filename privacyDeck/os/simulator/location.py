@@ -2,6 +2,7 @@ import platform
 import subprocess
 import time
 import ctypes
+import shutil
 
 
 VK_TAB = 0x09
@@ -57,6 +58,9 @@ def gui_toggle_location() -> bool:
 	4x TAB, 8x DOWN, ENTER, TAB, SPACE, ENTER, ALT+F4.
 	"""
 	os_type = platform.system()
+	if os_type == "Linux":
+		return _linux_toggle_location()
+
 	if os_type != "Windows":
 		print(f">> {os_type}: GUI-Automation nur unter Windows verfügbar")
 		return False
@@ -86,4 +90,72 @@ def gui_toggle_location() -> bool:
 
 	print(">> Location GUI-Sequenz ausgeführt")
 	return True
+
+
+def _linux_toggle_location() -> bool:
+	"""Best-effort toggle of location services on Linux.
+
+	Tries `gsettings` targets first, then `systemctl` for geoclue.service,
+	then `pkill`/`pgrep` as a last resort. Returns True if any action succeeded.
+	"""
+	if not (shutil.which("gsettings") or shutil.which("systemctl") or shutil.which("pkill") or shutil.which("pgrep")):
+		print(">> Linux: no supported tools (gsettings/systemctl/pkill/pgrep) found")
+		return False
+
+	# Try gsettings candidates
+	candidates = [
+		("org.gnome.settings-daemon.plugins.location", "active"),
+		("org.gnome.system.location", "enabled"),
+		("org.gnome.desktop.location", "enabled"),
+	]
+	for schema, key in candidates:
+		if not shutil.which("gsettings"):
+			break
+		try:
+			res = subprocess.run(["gsettings", "get", schema, key], capture_output=True, text=True)
+			if res.returncode == 0:
+				val = res.stdout.strip().lower()
+				if val in ("true", "false"):
+					new = "false" if val == "true" else "true"
+					setres = subprocess.run(["gsettings", "set", schema, key, new], capture_output=True, text=True)
+					if setres.returncode == 0:
+						print(f">> Linux: Location set to {new} via gsettings ({schema} {key})")
+						return True
+					else:
+						print(f">> gsettings set failed ({schema} {key}): {setres.stderr.strip()}")
+		except Exception:
+			continue
+
+	# Try systemctl for geoclue
+	if shutil.which("systemctl"):
+		for scope in ("--user", ""):
+			try:
+				status_cmd = ["systemctl", scope, "is-active", "geoclue.service"] if scope else ["systemctl", "is-active", "geoclue.service"]
+				status = subprocess.run(status_cmd, capture_output=True, text=True)
+				if status.returncode == 0:
+					state = status.stdout.strip()
+					action = "stop" if state == "active" else "start"
+					cmd = ["systemctl", scope, action, "geoclue.service"] if scope else ["systemctl", action, "geoclue.service"]
+					res = subprocess.run(cmd, capture_output=True, text=True)
+					if res.returncode == 0:
+						print(f">> Linux: geoclue.service {action}ed ({'off' if action=='stop' else 'on'})")
+						return True
+			except Exception:
+				continue
+
+	# Try pkill/pgrep for geoclue process
+	if shutil.which("pgrep") and shutil.which("pkill"):
+		try:
+			pg = subprocess.run(["pgrep", "-f", "geoclue"], capture_output=True, text=True)
+			if pg.returncode == 0:
+				# process running -> kill to disable
+				res = subprocess.run(["pkill", "-f", "geoclue"], capture_output=True, text=True)
+				if res.returncode == 0:
+					print(">> Linux: geoclue processes killed (location OFF)")
+					return True
+		except Exception:
+			pass
+
+	print(">> Linux: Unable to toggle location services with available methods")
+	return False
 

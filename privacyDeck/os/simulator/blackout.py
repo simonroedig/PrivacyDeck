@@ -2,6 +2,14 @@ import os
 import time
 import ctypes
 from ctypes import wintypes
+import platform
+import subprocess
+import re
+try:
+	from PIL import Image, ImageTk
+	_HAS_PIL = True
+except Exception:
+	_HAS_PIL = False
 
 
 VK_F11 = 0x7A
@@ -92,6 +100,22 @@ def _move_window_to_primary_monitor(hwnd) -> bool:
 	)
 
 
+def _get_linux_primary_monitor_geometry():
+	"""Get primary monitor geometry on Linux using xrandr."""
+	try:
+		res = subprocess.run(["xrandr", "--query"], capture_output=True, text=True)
+		if res.returncode == 0:
+			for line in res.stdout.splitlines():
+				if " connected primary " in line:
+					m = re.search(r"(\d+)x(\d+)\+(\d+)\+(\d+)", line)
+					if m:
+						width, height, x, y = map(int, m.groups())
+						return x, y, width, height
+	except Exception:
+		pass
+	return None
+
+
 def show_blackout_image():
 	base_dir = os.path.dirname(os.path.abspath(__file__))
 	image_path = os.path.join(base_dir, "blackout_images", "img1.jpg")
@@ -100,13 +124,60 @@ def show_blackout_image():
 		print(f">> Bild nicht gefunden: {image_path}")
 		return False
 
-	previous_hwnd = ctypes.windll.user32.GetForegroundWindow()
-	os.startfile(image_path)
-	hwnd = _wait_for_new_foreground_window(previous_hwnd)
-	_move_window_to_primary_monitor(hwnd)
-	time.sleep(0.35)
-	_key_tap(VK_F11)
+	os_type = platform.system()
+	if os_type == "Windows":
+		previous_hwnd = ctypes.windll.user32.GetForegroundWindow()
+		# open with default program
+		try:
+			os.startfile(image_path)
+		except Exception:
+			subprocess.run(["start", image_path], shell=True)
 
-	print(">> Blackout-Bild geöffnet, auf Hauptmonitor verschoben + F11 ausgelöst")
-	return True
+		hwnd = _wait_for_new_foreground_window(previous_hwnd)
+		_move_window_to_primary_monitor(hwnd)
+		time.sleep(0.35)
+		_key_tap(VK_F11)
+
+		print(">> Blackout-Bild geöffnet, auf Hauptmonitor verschoben + F11 ausgelöst")
+		return True
+
+	# Linux / other platforms: use native image viewer in fullscreen on primary monitor
+	try:
+		# Get primary monitor geometry
+		primary_geom = _get_linux_primary_monitor_geometry()
+		
+		# Try using common Linux image viewers in fullscreen mode
+		viewers = ["eog", "feh", "display"]
+		for viewer in viewers:
+			try:
+				if viewer == "eog":
+					subprocess.Popen([viewer, "--fullscreen", image_path])
+				elif viewer == "feh":
+					if primary_geom:
+						x, y, w, h = primary_geom
+						subprocess.Popen([viewer, "--fullscreen", "--geometry", f"{w}x{h}+{x}+{y}", image_path])
+					else:
+						subprocess.Popen([viewer, "--fullscreen", image_path])
+				elif viewer == "display":
+					if primary_geom:
+						x, y, w, h = primary_geom
+						subprocess.Popen([viewer, "-fullscreen", "-geometry", f"{w}x{h}+{x}+{y}", image_path])
+					else:
+						subprocess.Popen([viewer, "-fullscreen", image_path])
+				print(f">> Blackout-Bild geöffnet mit {viewer} auf Hauptmonitor")
+				return True
+			except FileNotFoundError:
+				continue
+			except Exception as e:
+				print(f">> {viewer} fehlgeschlagen: {e}")
+				continue
+
+		# Fallback: use xdg-open
+		subprocess.Popen(["xdg-open", image_path])
+		print(">> Blackout-Bild geöffnet mit xdg-open")
+		return True
+
+	except Exception as e:
+		print(f">> Image viewer failed: {e}")
+		return False
 
