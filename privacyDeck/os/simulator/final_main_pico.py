@@ -448,7 +448,8 @@ while True:
         if current_value != button_states_new[name]:
             if time.ticks_diff(current_time, last_debounce_time[pin_num]) > DEBOUNCE_DELAY:
                 if current_value == 0:
-                    send_serial("button", pin_num, name, BUTTONS[pin_num]["func"], "pressed")
+                    if current_avatar_state != "none":
+                        send_serial("button", pin_num, name, BUTTONS[pin_num]["func"], "pressed")
 
                     # --- START FADE TRIGGER ---
                     print(f"{name} should assign color")
@@ -482,7 +483,8 @@ while True:
         if current_value != button_states_new[name]:
             if time.ticks_diff(current_time, last_debounce_time[pin_num]) > DEBOUNCE_DELAY:
                 state_str = "ON" if current_value == 0 else "OFF"
-                send_serial("toggle", pin_num, name, TOGGLES[pin_num]["func"], state_str)
+                if current_avatar_state != "none":
+                    send_serial("toggle", pin_num, name, TOGGLES[pin_num]["func"], state_str)
                 button_states_new[name] = current_value
                 last_debounce_time[pin_num] = current_time
 
