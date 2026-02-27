@@ -35,9 +35,9 @@ FUNCTION_TO_ACTION = {
     "airplane mode": "toggle_airplane",
     "blackout/presentation mode": "show_blackout",
     "usb alert": "toggle_usb",
-    "browser clean": None,
+    "browser clean": "toggle_airplane",
     "gps mode": None,
-    "Instant Privacy": None,
+    "Instant Privacy": "instant_privacy",
 }
 
 
@@ -139,7 +139,7 @@ class PicoSerialListener:
             return
 
         print(f"[CALL] {action}")
-        self.event_callback(action)
+        self.event_callback(action, data)
 
 
 # ===== CALLBACKS =====
@@ -147,6 +147,14 @@ class PicoSerialListener:
 def toggle_mic():
     global mic_is_muted
     mic_is_muted = not mic_is_muted
+    set_mic_mute(mic_is_muted)
+    btn_toggle_mic.config(
+        text=f"Toggle: Mic {'Muted' if mic_is_muted else 'Active'}"
+    )
+
+def set_mic_state(mute):
+    global mic_is_muted
+    mic_is_muted = mute
     set_mic_mute(mic_is_muted)
     btn_toggle_mic.config(
         text=f"Toggle: Mic {'Muted' if mic_is_muted else 'Active'}"
@@ -161,8 +169,18 @@ def wipe_clipboard():
     wipe_clipboard_history()
 
 
-def show_blackout():
-    show_blackout_image()
+def show_blackout(img_name="img1.jpg"):
+    import blackout
+    old_join = blackout.os.path.join
+    def new_join(*args):
+        if args and args[-1] == "img1.jpg":
+            return old_join(*args[:-1], img_name)
+        return old_join(*args)
+    blackout.os.path.join = new_join
+    try:
+        show_blackout_image()
+    finally:
+        blackout.os.path.join = old_join
 
 
 def toggle_usb():
@@ -204,7 +222,9 @@ def update_network_status(text):
     root.after(0, lambda: network_status_label.config(text=text))
 
 
-def handle_network_event(event_name):
+def handle_network_event(event_name, data=None):
+    if data is None:
+        data = {}
     if event_name == "lock_system":
         root.after(0, lock_system)
     elif event_name == "wipe_clipboard":
@@ -214,9 +234,21 @@ def handle_network_event(event_name):
     elif event_name == "toggle_airplane":
         root.after(0, toggle_airplane_mode)
     elif event_name == "show_blackout":
-        root.after(0, show_blackout)
+        avatar = data.get("avatar", "none")
+        state = data.get("button_states", "OFF")
+        if state == "ON":
+            if avatar == "av2":
+                root.after(0, lambda: show_blackout("img2.jpg"))
+            elif avatar == "av1":
+                root.after(0, lambda: show_blackout("img1.jpg"))
     elif event_name == "toggle_mic":
-        root.after(0, toggle_mic)
+        state = data.get("button_states", "ON")
+        is_muted = (state == "ON")
+        root.after(0, lambda: set_mic_state(is_muted))
+    elif event_name == "instant_privacy":
+        root.after(0, lock_system)
+        root.after(0, toggle_airplane_mode)
+        root.after(0, wipe_clipboard)
 
 
 def on_close():
