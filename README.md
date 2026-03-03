@@ -64,7 +64,7 @@ PrivacyDeck/
 
 **Early vertical prototype:**
 
-![Vertical Prototype](vertical_prototype.png)
+![Vertical Prototype](vertical_prototype.jpg)
 
 ---
 
