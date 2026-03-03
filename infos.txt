@@ -1,3 +1,4 @@
 install on linux:
+e.g.:
 sudo apt install python3-opencv
 sudo pip install --break-system-packages sounddevice
