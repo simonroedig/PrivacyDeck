@@ -1,1 +1,0 @@
-hier vlt pinout bilder etc. oder wir lassen den folder weg und packen sowas in /root
