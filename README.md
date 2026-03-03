@@ -124,5 +124,3 @@ Winter Semester 2025/26
 ---
 
 **Made with ❤️ for privacy that finally feels effortless.**
-
-```
