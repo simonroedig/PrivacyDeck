@@ -8,6 +8,11 @@
 
 ---
 
+## Video Demonstration:
+<a href="https://www.youtube.com/watch?v=T16Eui8qbHk" target="_blank">
+    <img src="youtube.png" alt="Watch the video demonstration" width="100" height="auto"/>
+</a>
+
 ## The Problem
 
 Although privacy tools exist, they are buried deep inside complex, fragmented OS settings. There is **no unified control dashboard** and **no immediate feedback**.  
