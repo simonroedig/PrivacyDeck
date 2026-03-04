@@ -1,0 +1,235 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 14% 96%;
+    --foreground: 220 15% 13%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 13%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 13%;
+
+    --primary: 221 80% 56%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 93%;
+    --secondary-foreground: 220 15% 13%;
+
+    --muted: 220 12% 93%;
+    --muted-foreground: 220 8% 50%;
+
+    --accent: 220 14% 93%;
+    --accent-foreground: 220 15% 13%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 220 13% 90%;
+    --input: 220 13% 90%;
+    --ring: 221 80% 56%;
+
+    --radius: 0.875rem;
+
+    /* Sidebar — frosted dark */
+    --sidebar-bg: 225 25% 10%;
+    --sidebar-fg: 220 15% 85%;
+    --sidebar-active: 221 80% 60%;
+    --sidebar-active-fg: 0 0% 100%;
+    --sidebar-muted: 225 20% 16%;
+    --sidebar-border: 225 20% 15%;
+
+    /* macOS chrome — light glass */
+    --chrome-bg: 220 20% 98%;
+    --chrome-border: 220 13% 91%;
+    --chrome-text: 220 8% 50%;
+
+    /* Feature badges */
+    --badge-success-bg: 152 76% 93%;
+    --badge-success-text: 160 84% 30%;
+    --badge-danger-bg: 0 86% 95%;
+    --badge-danger-text: 0 72% 45%;
+
+    /* Toggle card */
+    --toggle-card-bg: 225 25% 14%;
+    --toggle-card-fg: 220 15% 85%;
+
+    /* Device visualizer */
+    --device-bg: 225 25% 12%;
+    --device-button-active: 221 80% 56%;
+    --device-button-inactive: 225 15% 28%;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 225 20% 7%;
+    --foreground: 220 15% 90%;
+
+    --card: 225 20% 10%;
+    --card-foreground: 220 15% 90%;
+
+    --popover: 225 20% 10%;
+    --popover-foreground: 220 15% 90%;
+
+    --primary: 221 80% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 225 15% 16%;
+    --secondary-foreground: 220 15% 90%;
+
+    --muted: 225 15% 14%;
+    --muted-foreground: 220 8% 55%;
+
+    --accent: 225 15% 16%;
+    --accent-foreground: 220 15% 90%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 225 15% 16%;
+    --input: 225 15% 16%;
+    --ring: 221 80% 60%;
+
+    --chrome-bg: 225 20% 9%;
+    --chrome-border: 225 15% 14%;
+    --chrome-text: 220 8% 50%;
+
+    --badge-success-bg: 152 50% 15%;
+    --badge-success-text: 160 84% 50%;
+    --badge-danger-bg: 0 50% 15%;
+    --badge-danger-text: 0 72% 65%;
+
+    --toggle-card-bg: 225 25% 12%;
+    --toggle-card-fg: 220 15% 85%;
+
+    --device-bg: 225 25% 8%;
+    --device-button-active: 221 80% 56%;
+    --device-button-inactive: 225 15% 20%;
+
+    --sidebar-background: 225 20% 7%;
+    --sidebar-foreground: 220 15% 85%;
+    --sidebar-primary: 220 15% 90%;
+    --sidebar-primary-foreground: 225 20% 7%;
+    --sidebar-accent: 225 15% 14%;
+    --sidebar-accent-foreground: 220 15% 90%;
+    --sidebar-border: 225 15% 14%;
+    --sidebar-ring: 221 80% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* macOS-style scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(220 8% 50% / 0.18);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(220 8% 50% / 0.35);
+}
+
+/* Green flash on toggle */
+@keyframes flash-green {
+  0% { background-color: hsl(152 76% 93% / 0); }
+  25% { background-color: hsl(152 76% 93% / 0.45); }
+  100% { background-color: hsl(152 76% 93% / 0); }
+}
+
+.flash-green {
+  animation: flash-green 0.5s ease-out;
+}
+
+/* Avatar floating animation */
+@keyframes avatar-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.animate-avatar-float {
+  animation: avatar-float 3s ease-in-out infinite;
+}
+
+/* Avatar breathing animation */
+@keyframes avatar-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+.animate-avatar-breathe {
+  animation: avatar-breathe 4s ease-in-out infinite;
+}
+
+/* Fade in utility */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Page enter — used for route transitions */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-page-enter {
+  animation: page-enter 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Pulse animation for overview */
+@keyframes pulse-line {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* Glass morphism utility */
+.glass {
+  background: hsl(var(--card) / 0.75);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+}
+
+/* Subtle card hover lift */
+.card-hover {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px hsl(220 15% 13% / 0.09), 0 2px 8px hsl(220 15% 13% / 0.05);
+}
+.dark .card-hover:hover {
+  box-shadow: 0 8px 28px hsl(220 15% 4% / 0.35), 0 2px 8px hsl(220 15% 4% / 0.2);
+}

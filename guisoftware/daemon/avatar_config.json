@@ -1,0 +1,15 @@
+{
+  "name": "JamesBot",
+  "colorScheme": "hackerGreen",
+  "primaryColor": "#065F46",
+  "accentColor": "#34D399",
+  "bodyShape": "tall",
+  "faceStyle": "expressive",
+  "accessories": [
+    "starBadge",
+    "sunglasses",
+    "scarf",
+    "topHat"
+  ],
+  "animationStyle": "reactive"
+}
